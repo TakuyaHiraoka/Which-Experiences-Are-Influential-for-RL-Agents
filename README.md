@@ -1,5 +1,5 @@
 # What is this?
-This is the source code to replicate the experiments provided in [``Which Experiences Are Influential for Your Agent? Policy Iteration with Turn-over Dropout''](XXX)
+This is the source code to replicate the experiments provided in [``Which Experiences Are Influential for Your Agent? Policy Iteration with Turn-over Dropout''](https://arxiv.org/abs/2301.11168)
 
 # How to use this?
 You can train agents as following examples.
