@@ -3,10 +3,10 @@ This is the source code to replicate the experiments provided in [``Which Experi
 
 The code provides an efficient method for estimating the influence of experiences stored in the replay buffer on performance (e.g. Q-estimation bias). 
 
-**Visualization of the influence of experiences for SAC (SAC+ToD) in Humanoid**
+**Demo video1: Visualization of the influence of experiences for SAC (SAC+ToD) in Humanoid**
 [![SACToDHumanoid](figures/SAC+ToD-Humanoid.jpg)](https://drive.google.com/file/d/1jtQP0VVuJzPX778DtvgvSDE-mCD0wrbv/view?usp=share_link "SAC")
 
-**Visualization of the influence of experiences for REDQ (REDQ+ToD) in Humanoid**
+**Demo video2: Visualization of the influence of experiences for REDQ (REDQ+ToD) in Humanoid**
 [![REDQToDHumanoid](figures/SAC+ToD-Humanoid.jpg)](https://drive.google.com/file/d/1mQ4GnF_HYEbUgImxFHdl1zeTu4rjXEvA/view?usp=share_link "REDQ")
 
 
