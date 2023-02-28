@@ -7,7 +7,7 @@ The code provides an efficient method for estimating the influence of experience
 [![SACToDHumanoid](figures/SAC+ToD-Humanoid.jpg)](https://drive.google.com/file/d/1jtQP0VVuJzPX778DtvgvSDE-mCD0wrbv/view?usp=share_link "SAC")
 
 **Demo video2: Visualization of the influence of experiences for REDQ (REDQ+ToD) in Humanoid**
-[![REDQToDHumanoid](figures/SAC+ToD-Humanoid.jpg)](https://drive.google.com/file/d/1mQ4GnF_HYEbUgImxFHdl1zeTu4rjXEvA/view?usp=share_link "REDQ")
+[![REDQToDHumanoid](figures/REDQ+ToD-Humanoid.jpg)](https://drive.google.com/file/d/1mQ4GnF_HYEbUgImxFHdl1zeTu4rjXEvA/view?usp=share_link "REDQ")
 
 
 # How to use this?
