@@ -1,6 +1,15 @@
 # What is this?
 This is the source code to replicate the experiments provided in [``Which Experiences Are Influential for Your Agent? Policy Iteration with Turn-over Dropout''](https://arxiv.org/abs/2301.11168)
 
+The code provides an efficient method for estimating the influence of experiences stored in the replay buffer on performance (e.g. Q-estimation bias). 
+
+**Visualization of the influence of experiences for SAC (SAC+ToD) in Humanoid**
+![SACToDHumanoid](https://drive.google.com/file/d/1jtQP0VVuJzPX778DtvgvSDE-mCD0wrbv/view?usp=share_link)
+
+**Visualization of the influence of experiences for REDQ (REDQ+ToD) in Humanoid**
+![REDQToDHumanoid](https://drive.google.com/file/d/1mQ4GnF_HYEbUgImxFHdl1zeTu4rjXEvA/view?usp=share_link)
+
+
 # How to use this?
 You can train agents as following examples.
 # SAC+ToD agent
