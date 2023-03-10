@@ -9,6 +9,8 @@ The code provides an efficient method for estimating the influence of experience
 **Demo video2: Visualization of the influence of experiences for REDQ (REDQ+ToD) in Humanoid**
 [![REDQToDHumanoid](figures/REDQ+ToD-Humanoid.jpg)](https://drive.google.com/file/d/1mQ4GnF_HYEbUgImxFHdl1zeTu4rjXEvA/view?usp=share_link "REDQ")
 
+**Demo video3: Visualization of the influence of experiences for DroQ (DroQ+ToD) in Humanoid**
+[![REDQToDHumanoid](https://drive.google.com/file/d/18Xieotx8Okfx1fQrasI82Vz-QcvZJRoM/preview)](https://drive.google.com/file/d/18Xieotx8Okfx1fQrasI82Vz-QcvZJRoM/view?usp=sharing "DroQ")
 
 # How to use this?
 You can train agents as following examples.
