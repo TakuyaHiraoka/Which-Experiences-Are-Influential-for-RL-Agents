@@ -1,5 +1,7 @@
 
-:warning: tod.py in this codebase contains a bug that masks in which all of the elements are 1 to elements are assigned to experiences with high index numbers. A bug fix will be made later. :warning: 
+
+:warning: tod.py in this codebase contains the bug that the mask in which all elements are 1 is assigned to an experience with a high index number. A bug fix will be made later. :warning: 
+
 
 
 # What is this?
