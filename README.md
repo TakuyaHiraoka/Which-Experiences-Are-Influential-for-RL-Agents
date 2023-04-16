@@ -1,3 +1,7 @@
+
+:warning: tod.py in this codebase contains a bug that masks in which all of the elements are 1 to elements are assigned to experiences with high index numbers. A bug fix will be made later. :warning: 
+
+
 # What is this?
 This is the source code to replicate the experiments provided in [``Which Experiences Are Influential for Your Agent? Policy Iteration with Turn-over Dropout''](https://arxiv.org/abs/2301.11168)
 
