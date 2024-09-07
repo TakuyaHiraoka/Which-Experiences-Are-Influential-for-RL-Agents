@@ -1,121 +1,136 @@
+from typing import Dict, Tuple, Union
+
 import gym
 import numpy as np
 import torch
 import time
 import sys
+
 from redq.algos.redq_sac import REDQSACAgent
 from redq.algos.core import mbpo_epoches, test_agent
 from redq.utils.run_utils import setup_logger_kwargs
-from redq.utils.bias_utils import log_bias_evaluation
+from redq.utils.bias_utils import log_evaluation
 from redq.utils.logx import EpochLogger
 
-# added by TH 20211206
 import customenvs
-
+import dmc2gym
+# register environments with truncated observations
 customenvs.register_mbpo_environments()
+# DM control suite
+dm_control_env = ["fish-swim", "hopper-hop", "quadruped-run",
+                  "cheetah-run", "humanoid-run", "humanoid-stand",
+                  "finger-turn_hard", "hopper-stand"]
 
 
-def redq_sac(env_name, seed=0, epochs='mbpo',
-             steps_per_epoch=5000,
-             max_ep_len=1000,
-             n_evals_per_epoch=10,
-             logger_kwargs=dict(), debug=False,
-             # following are agent related hyperparameters
-             hidden_sizes=(int(256 / 2), int(256 / 2)),
-             replay_size=int(2e6),
-             batch_size=256,
-             lr=3e-4,
-             gamma=0.99,
-             polyak=0.995,
-             alpha=0.2, auto_alpha=True, target_entropy='mbpo',
-             start_steps=5000,
-             delay_update_steps='auto',
-             utd_ratio=4,
-             num_Q=10, num_min=2, q_target_mode='min',
-             policy_update_delay=20,
-             # following are bias evaluation related
-             evaluate_bias=True, n_mc_eval=1000, n_mc_cutoff=350, reseed_each_epoch=True,
-             # TH 20211108
-             gpu_id=0, target_drop_rate=0.0, layer_norm=False,
-             method="redq",
-             # TH 20221014
-             #turn_over_dropout_rate=0.0,
-             # TH 20221024 <- modefied @ 20221107
-             #apply_only_last_layer_Q=[],
-             #apply_only_last_layer_Policy=[],
-             layer_norm_policy=False,
-
-             # TH 20230206
-             experience_cleansing=True,
-             # TH 20230406
-             record_training_self_training_losses=True,  # * record TD error and policy losses each with mask and non-flipped mask.
-             ):
+def pitod(env_name: str,
+          seed: int = 0,
+          epochs: int = -1,
+          steps_per_epoch: int = 5000,
+          max_ep_len: int = 1000,
+          n_evals_per_epoch: int = 10,
+          logger_kwargs: Dict = dict(),
+          gpu_id: int = 0,
+          # The following are base agent related hyperparameters
+          hidden_sizes: Tuple[int, ...] = (int(256 / 2), int(256 / 2)),
+          replay_size: int = int(2e6),
+          batch_size: int = 256,
+          lr: float = 3e-4,
+          gamma: float = 0.99,
+          polyak: float = 0.995,
+          alpha: float = 0.2,
+          auto_alpha: bool = True,
+          target_entropy: Union[str, float] = 'mbpo',
+          start_steps: int = 5000,
+          delay_update_steps: Union[str, int] = 'auto',
+          utd_ratio: int = 4,
+          num_Q: int = 2,
+          num_min: int = 2,
+          policy_update_delay: int = 20,
+          # The following are bias evaluation related
+          evaluate_bias: bool = True,
+          n_mc_eval: int = 1000,
+          n_mc_cutoff: int = 350,
+          reseed_each_epoch: bool = True,
+          # The following are PIToD network structure related
+          layer_norm: bool = False,
+          layer_norm_policy: bool = False,
+          experience_group_size: int = 5000,
+          mask_dim: int = 20,
+          target_drop_rate: float = 0.0,
+          reset_interval: int = -1,
+          # The following are PIToD evaluation related
+          experience_cleansing: bool = True,
+          dump_trajectory_for_demo: bool = False,  # True,
+          record_training_self_training_losses: bool = True,
+          influence_estimation_interval: int = 10,
+          ):
     """
-    :type logger_kwargs: object
-    :param env_name: name of the gym environment
-    :param saaeed: random seed
-    :param epochs: number of epochs 2to run
-    :param steps_per_epoch: number of timestep (datapoints) for each epoch
-    :param max_ep_len: max timestep until an episode terminates
-    :param n_evals_per_epoch: number of evaluation runs for each epoch
-    :param logger_kwargs: arguments for logger
-    :param debug: whether to run in debug mode
-    :param hidden_sizes: hidden layer sizes
-    :param replay_size: replay buffer size
-    :param batch_size: mini-batch size
-    :param lr: learning rate for all networks
-    :param gamma: discount factor
-    :param polyak: hyperparameter for polyak averaged target networks
-    :param alpha: SAC entropy hyperparameter
-    :param auto_alpha: whether to use adaptive SAC
-    :param target_entropy: used for adaptive SAC
-    :param start_steps: the number of random data collected in the beginning of training
-    :param delay_update_steps: after how many data collected should we start updates
-    :param utd_ratio: the update-to-data ratio
-    :param num_Q: number of Q networks in the Q ensemble
-    :param num_min: number of sampled Q values to take minimal from
-    :param q_target_mode: 'min' for minimal, 'ave' for average, 'rem' for random ensemble mixture
-    :param policy_update_delay: how many updates until we update policy network
+    Run PIToD algorithm.
+    
+    :param env_name: Name of the gym environment.
+    :param seed: Random seed.
+    :param epochs: Total number of epochs.
+    :param steps_per_epoch: Number of timesteps (i.e., environment interactions) for each epoch.
+    :param max_ep_len: Maximum number of timesteps until an episode terminates.
+    :param n_evals_per_epoch: Number of evaluations for each epoch.
+    :param logger_kwargs: Arguments for the logger.
+    :param gpu_id: GPU ID to be used for computation.
+    :param hidden_sizes: Sizes of the hidden layers of Q and policy networks.
+    :param replay_size: Size of the replay buffer.
+    :param batch_size: Mini-batch size.
+    :param lr: Learning rate for Q and policy networks.
+    :param gamma: Discount factor.
+    :param polyak: Hyperparameter for Polyak-averaged target networks.
+    :param alpha: SAC entropy hyperparameter.
+    :param auto_alpha: Whether to use adaptive entropy coefficient.
+    :param target_entropy: Target entropy used for adaptive entropy coefficient.
+    :param start_steps: Number of experiences collected at the beginning of training.
+    :param delay_update_steps: Number of experiences collected before starting updates.
+    :param utd_ratio: Update-to-data (Q and policy network update) ratio.
+    :param num_Q: Number of Q networks in the Q ensemble.
+    :param num_min: Number of sampled Q values to take the minimum from.
+    :param policy_update_delay: Number of updates before updating the policy network.
+    :param evaluate_bias: Whether to evaluate Q-estimation bias.
+    :param n_mc_eval: The total number of true Q-values used for bias evaluation.
+    :param n_mc_cutoff: The cutoff episode length for Q-bias evaluation.
+    :param reseed_each_epoch: Whether to reseed the random number generator at the start of each epoch.
+    :param layer_norm: Whether to use layer normalization for Q-networks.
+    :param layer_norm_policy: Whether to use layer normalization in the policy network.
+    :param experience_group_size: size of experience group
+    :param mask_dim: size of mask for turn-over dropout.
+    :param target_drop_rate: The rate at which each weight of Q-networks is dropped.
+    :param reset_interval: Interval (number of environment interactions) for periodical parameter reset.
+    :param experience_cleansing: Periodical evaluation with deletion of negatively influential experiences.
+    :param dump_trajectory_for_demo: Whether to dump the trajectory for visualization purposes.
+    :param record_training_self_training_losses: Whether to record training and self-training losses.
+    :param influence_estimation_interval:  interval for influence estimation and policy/Q-function amendment.
     """
-    if debug:  # use --debug for very quick debugging
-        hidden_sizes = [2, 2]
-        batch_size = 2
-        utd_ratio = 2
-        num_Q = 3
-        max_ep_len = 100
-        start_steps = 100
-        steps_per_epoch = 100
 
-    assert method in ["sac", "redq", "duvn", "monosac"], "illigal method:" + str(method)
-    if method == "sac":
-        print("[MAIN]: use SAC. set num_Q to 2")
-        num_Q = 2
-    elif method == "duvn":
-        print("[MAIN]: use DUVN. set num_Q  and  num_min to 1")
-        num_Q = 1
-        num_min = 1
-
-    # use gpu if available
+    # set device to gpu if available
     device = torch.device("cuda:" + str(gpu_id) if torch.cuda.is_available() else "cpu")
+
     # set number of epoch
-    if epochs == 'mbpo' or epochs < 0:
-        # add 20211206
+    if epochs < 0:
         mbpo_epoches['AntTruncatedObs-v2'] = 300
         mbpo_epoches['HumanoidTruncatedObs-v2'] = 300
+        mbpo_epoches.update(dict(zip(dm_control_env, [300 for _ in dm_control_env])))
         epochs = mbpo_epoches[env_name]
     total_steps = steps_per_epoch * epochs + 1
 
-    """set up logger"""
+    # set up logger
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(locals())
 
-    """set up environment and seeding"""
-    env_fn = lambda: gym.make(args.env)
-    env, test_env, bias_eval_env = env_fn(), env_fn(), env_fn()
-
-    # TH 20230419
-    if record_training_self_training_losses:
-        valid_env = env_fn()
+    # set up environment and seeding
+    if args.env in dm_control_env:
+        domain_name, task_name = args.env.split("-")[0], args.env.split("-")[1]
+        env = dmc2gym.make(domain_name, task_name)
+        test_env = dmc2gym.make(domain_name, task_name)
+        bias_eval_env = dmc2gym.make(domain_name, task_name)
+        if target_entropy == "mbpo":  # change target entropy mode to auto as mbpo is not supported for DMC cases
+            target_entropy = 'auto'
+    else:
+        env, test_env, bias_eval_env = gym.make(args.env), gym.make(args.env), gym.make(args.env)
 
     # seed torch and numpy
     torch.manual_seed(seed)
@@ -139,7 +154,7 @@ def redq_sac(env_name, seed=0, epochs='mbpo',
 
     seed_all(epoch=0)
 
-    """prepare to init agent"""
+    # prepare to init agent
     # get obs and action dimensions
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
@@ -152,37 +167,24 @@ def redq_sac(env_name, seed=0, epochs='mbpo',
     start_time = time.time()
     # flush logger (optional)
     sys.stdout.flush()
-    #################################################################################################
 
-    """init agent and start training"""
-    agent = REDQSACAgent(env_name, obs_dim, act_dim, act_limit, device,
-                         hidden_sizes, replay_size, batch_size,
-                         lr, gamma, polyak,
-                         alpha, auto_alpha, target_entropy,
-                         start_steps, delay_update_steps,
-                         utd_ratio, num_Q, num_min, q_target_mode,
-                         policy_update_delay,
-                         target_drop_rate=target_drop_rate,
-                         layer_norm=layer_norm,  # added by TH 20211206 <- bug fix 20211207
-                         layer_norm_policy=layer_norm_policy,  # added by TH 20221024
+    # init agent and start training
+    agent = REDQSACAgent(env_name=env_name, obs_dim=obs_dim, act_dim=act_dim, act_limit=act_limit, device=device,
+                         hidden_sizes=hidden_sizes, replay_size=replay_size, batch_size=batch_size,
+                         lr=lr, gamma=gamma, polyak=polyak, alpha=alpha, auto_alpha=auto_alpha,
+                         target_entropy=target_entropy, start_steps=start_steps, delay_update_steps=delay_update_steps,
+                         utd_ratio=utd_ratio, num_Q=num_Q, num_min=num_min, policy_update_delay=policy_update_delay,
+                         target_drop_rate=target_drop_rate, layer_norm=layer_norm, layer_norm_policy=layer_norm_policy,
+                         experience_group_size=experience_group_size, mask_dim=mask_dim,
                          )
 
     o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
-    # for validation. TH20230419
-    if record_training_self_training_losses:
-        o_val, r_val, d_val = valid_env.reset(), 0, False
-
     for t in range(total_steps):
         # get action from agent
         a = agent.get_exploration_action(o, env)
-        # Step the env, get next observation, reward and done signal
+        # step the env, get next observation, reward and done signal
         o2, r, d, _ = env.step(a)
-
-        # for validation. TH20230419
-        if record_training_self_training_losses:
-            a_val = agent.get_exploration_action(o_val, valid_env)
-            o2_val, r_val, d_val, _ = valid_env.step(a_val)
 
         # Very important: before we let agent store this transition,
         # Ignore the "done" signal if it comes from hitting the time
@@ -205,14 +207,6 @@ def redq_sac(env_name, seed=0, epochs='mbpo',
             # reset environment
             o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
-        # for validation. TH20230419
-        if record_training_self_training_losses:
-            agent.store_data_validation(o_val, a_val, r_val, o2_val, d_val)
-
-            o_val = o2_val
-            if d_val:
-                o_val, r_val, d_val = valid_env.reset(), 0, False
-
         # End of epoch wrap-up
         if (t + 1) % steps_per_epoch == 0:
             epoch = t // steps_per_epoch
@@ -220,16 +214,18 @@ def redq_sac(env_name, seed=0, epochs='mbpo',
             # Test the performance of the deterministic version of the agent.
             test_agent(agent, test_env, max_ep_len, logger, n_eval=n_evals_per_epoch)  # add logging here
             if evaluate_bias:
-                log_bias_evaluation(bias_eval_env, agent, logger, max_ep_len, alpha, gamma, n_mc_eval, n_mc_cutoff,
+                log_evaluation(bias_eval_env, agent, logger, max_ep_len, alpha, gamma, n_mc_eval, n_mc_cutoff,
                                     experience_cleansing=experience_cleansing,
-                                    record_training_self_training_losses=record_training_self_training_losses
+                                    dump_trajectory_for_demo=dump_trajectory_for_demo,
+                                    record_training_self_training_losses=record_training_self_training_losses,
+                                    influence_estimation_interval=influence_estimation_interval,
                                     )
 
             # reseed should improve reproducibility (should make results the same whether bias evaluation is on or not)
             if reseed_each_epoch:
                 seed_all(epoch)
 
-            """logging"""
+            # logging
             # Log info about epoch
             logger.log_tabular('Epoch', epoch)
             logger.log_tabular('TotalEnvInteracts', t)
@@ -239,9 +235,7 @@ def redq_sac(env_name, seed=0, epochs='mbpo',
             logger.log_tabular('TestEpRet', with_min_and_max=True)
             logger.log_tabular('TestEpLen', average_only=True)
             logger.log_tabular('Q1Vals', with_min_and_max=True)
-            # logger.log_tabular('LossQ1', average_only=True)
-            logger.log_tabular('LossQ1')  # dump mean std. TH 20220208
-            logger.log_tabular('LossQ1Grad')  # dump mean std. TH 20220208
+            logger.log_tabular('LossQ1')
             logger.log_tabular('LogPi', with_min_and_max=True)
             logger.log_tabular('LossPi', average_only=True)
             logger.log_tabular('Alpha', with_min_and_max=True)
@@ -263,67 +257,52 @@ def redq_sac(env_name, seed=0, epochs='mbpo',
             # flush logged information to disk
             sys.stdout.flush()
 
+        # ResetToD
+        if ((t % reset_interval) == 0) and (reset_interval >= 0):
+            agent.reset()
+
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-env', type=str, default='Hopper-v2')
-    parser.add_argument('-seed', type=int, default=0)
-    parser.add_argument('-epochs', type=int, default=-1)  # -1 means use mbpo epochs
-    parser.add_argument('-exp_name', type=str, default='redq_sac')
-    parser.add_argument('-data_dir', type=str, default='./data/')
-    parser.add_argument('-debug', action='store_true')
-    # added by TH 20211108
-    # use: -info, -gpu_id, -method, -target_drop_rate, -layer_norm
-    parser.add_argument("-info", type=str, help="Information or name of the run")
+
+    parser.add_argument('-env', type=str, default='Hopper-v2',
+                        help="Name of the gym environment. Default is Hopper-v2.")
+    parser.add_argument('-seed', type=int, default=0,
+                        help="Random seed. Default is 0.")
+    parser.add_argument('-epochs', type=int, default=-1,
+                        help="Number of epochs. Default is -1, "
+                             "which means using the epochs specified in the MBPO paper.")
+    parser.add_argument('-exp_name', type=str, default='redq_sac',
+                        help="Name of the experiment. Default is redq_sac.")
+    parser.add_argument('-data_dir', type=str, default='./data/',
+                        help="Directory to save data. Default is ./data/.")
+    parser.add_argument("-info", type=str,
+                        help="Name of the run. Generally set to the name of the RL method (e.g., SAC+ToD).")
     parser.add_argument("-gpu_id", type=int, default=0,
-                        help="GPU device ID to be used in GPU experiment, default is 1e6")
-    parser.add_argument("-method", default="sac", choices=["sac", "redq", "duvn", "monosac"],
-                        help="method, default=sac")
+                        help="GPU device ID to be used in experiment with GPU. Default is 0.")
     parser.add_argument("-target_drop_rate", type=float, default=0.0,
-                        help="drop out rate of target value function, default=0")
+                        help="Dropout rate for the Q-network. Default is 0.")
     parser.add_argument("-layer_norm", type=int, default=0, choices=[0, 1],
-                        help="Using layer normalization for training critics if set to 1 (TH), default=0")
-    # ignore: -eval_every, -frames, -eval_runs, -updates_per_step, -target_entropy,
-    parser.add_argument("-eval_every", type=int, default=1000,
-                        help="Number of interactions after which the evaluation runs are performed, default = 1000")
-    parser.add_argument("-frames", type=int, default=1000000,
-                        help="The amount of training interactions with the environment, default is 1mio")
-    parser.add_argument("-eval_runs", type=int, default=3, help="Number of evaluation runs performed, default = 1")
-    parser.add_argument("-updates_per_step", type=int, default=1,
-                        help="Number of training updates per one environment step, default = 1")
-    parser.add_argument("-target_entropy", type=float, default=None, help="target entropy , default=Num action")
-
-    # added by TH 20220126
-    parser.add_argument("-num_q", type=int, default=10, help="Number of Q networks in the Q ensemble for REDQ")
-
-
-    # added by TH 20221024
+                        help="Use layer normalization for the Q-network if set to 1. Default is 0 (False).")
+    parser.add_argument("-num_q", type=int, default=2,
+                        help="Number of Q networks in the Q ensemble. Default is 2.")
     parser.add_argument("-layer_norm_policy", type=int, default=0, choices=[0, 1],
-                        help="Using layer normalization for training policy if set to 1 (TH), default=0")
+                        help="Use layer normalization for the policy network if set to 1. Default is 0 (False).")
+    parser.add_argument("-reset_interval", type=int, default=-1,
+                        help="Reset interval w.r.t the number of environment interactions. "
+                             "Default is -1, which means no reset.")
 
     args = parser.parse_args()
 
-    # modify the code here if you want to use a different naming scheme
-    exp_name_full = args.exp_name + '_%s' % args.env
-
-    # override log directory path. TH 20211108
+    # setup experiment log directories
     args.data_dir = './runs/' + str(args.info) + '/'
-
-    # specify experiment name, seed and data_dir.
-    # for example, for seed 0, the progress.txt will be saved under data_dir/exp_name/exp_name_s0
+    exp_name_full = args.exp_name + '_%s' % args.env
+    # - specify experiment name, seed and data_dir.
+    # - for example, for seed 0, the progress.txt will be saved under runs/data_dir/exp_name/exp_name_s0
     logger_kwargs = setup_logger_kwargs(exp_name_full, args.seed, args.data_dir)
 
-    redq_sac(args.env, seed=args.seed, epochs=args.epochs,
-             logger_kwargs=logger_kwargs, debug=args.debug,
-             # added by TH 20220126
-             num_Q=args.num_q,
-             # added by TH 20211206
-             gpu_id=args.gpu_id,
-             target_drop_rate=args.target_drop_rate,  # target entropy -> dropout rate. Fixed 20211206
-             layer_norm=bool(args.layer_norm),
-             method=args.method,
-
-             layer_norm_policy=bool(args.layer_norm_policy)  # TH20221024
-             )
+    pitod(args.env, seed=args.seed, epochs=args.epochs, logger_kwargs=logger_kwargs, gpu_id=args.gpu_id,
+          num_Q=args.num_q, layer_norm=bool(args.layer_norm), layer_norm_policy=bool(args.layer_norm_policy),
+          target_drop_rate=args.target_drop_rate, reset_interval=args.reset_interval)
