@@ -43,5 +43,5 @@ The experimental results will be recorded in the `runs` directory. This folder w
 
 To visualize the results, run the following command:
 ```
-plot_main_results_pitod.py
+python plot_main_results_pitod.py
 ```
