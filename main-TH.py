@@ -28,6 +28,7 @@ def pitod(env_name: str,
           steps_per_epoch: int = 5000,
           max_ep_len: int = 1000,
           n_evals_per_epoch: int = 10,
+          adversarial_reward_epoch: int = -999,
           logger_kwargs: Dict = dict(),
           gpu_id: int = 0,
           # The following are base agent related hyperparameters
@@ -73,6 +74,7 @@ def pitod(env_name: str,
     :param steps_per_epoch: Number of timesteps (i.e., environment interactions) for each epoch.
     :param max_ep_len: Maximum number of timesteps until an episode terminates.
     :param n_evals_per_epoch: Number of evaluations for each epoch.
+    :param adversarial_reward_epoch: The epoch during which the agent encounters adversarial rewards.
     :param logger_kwargs: Arguments for the logger.
     :param gpu_id: GPU ID to be used for computation.
     :param hidden_sizes: Sizes of the hidden layers of Q and policy networks.
@@ -186,6 +188,10 @@ def pitod(env_name: str,
         # step the env, get next observation, reward and done signal
         o2, r, d, _ = env.step(a)
 
+        if ((t >= (adversarial_reward_epoch * steps_per_epoch))
+                and (t <= (adversarial_reward_epoch * steps_per_epoch + steps_per_epoch))):
+            r = r * (-100.0)
+
         # Very important: before we let agent store this transition,
         # Ignore the "done" signal if it comes from hitting the time
         # horizon (that is, when it's an artificial terminal signal
@@ -293,6 +299,8 @@ if __name__ == '__main__':
     parser.add_argument("-reset_interval", type=int, default=-1,
                         help="Reset interval w.r.t the number of environment interactions. "
                              "Default is -1, which means no reset.")
+    parser.add_argument("-adversarial_reward_epoch", type=int, default=-999,
+                        help="The epoch during which the agent encounters adversarial rewards. Default is -999.")
 
     args = parser.parse_args()
 
@@ -305,4 +313,5 @@ if __name__ == '__main__':
 
     pitod(args.env, seed=args.seed, epochs=args.epochs, logger_kwargs=logger_kwargs, gpu_id=args.gpu_id,
           num_Q=args.num_q, layer_norm=bool(args.layer_norm), layer_norm_policy=bool(args.layer_norm_policy),
-          target_drop_rate=args.target_drop_rate, reset_interval=args.reset_interval)
+          target_drop_rate=args.target_drop_rate, reset_interval=args.reset_interval,
+          adversarial_reward_epoch=args.adversarial_reward_epoch)
