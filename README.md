@@ -23,7 +23,7 @@ Note that you need a licence to install `mujoco_py`. For installation, please fo
 
 
 # Usage
-Currently, this codebase supports SAC, DroQ, and reset agents.
+Currently, this codebase supports [SAC](https://proceedings.mlr.press/v80/haarnoja18b.html), [DroQ](https://openreview.net/forum?id=xCVJMsPv3RT), and [reset](https://proceedings.mlr.press/v162/nikishin22a) agents.
 
 To estimate the influence of experiences on a SAC agent, run `main-TH.py`, e.g., 
 ```
