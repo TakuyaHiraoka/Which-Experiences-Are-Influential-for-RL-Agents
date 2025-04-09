@@ -2,10 +2,11 @@
 
 # What is this?
 
-This is the source code to replicate the experiments reported in the paper ["Which Experiences Are Influential for RL Agents? Efficiently Estimating The Influence of Experiences."](https://arxiv.org/abs/2405.14629)
+This is the source code for replicating the experiments reported in the paper ["Which Experiences Are Influential for RL Agents? Efficiently Estimating The Influence of Experiences."](https://arxiv.org/abs/2405.14629)
 
-This codebase provides a way to efficiently estimate and disable the influence of experiences on the performance of reinforcement learning (RL) agents. 
+This codebase provides a method to estimate and disable the influence of experiences on the performance of reinforcement learning (RL) agents **WITHOUT** retraining them. 
 ![Outline](figure_readme/pitod_outline.jpg)
+
 
 What is this functionality used for? This functionality can be used to debug RL agents. 
 When an RL agent fails to learn properly, identifying and disabling the experiences that negatively affect the agent can improve its performance. 
