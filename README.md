@@ -2,7 +2,7 @@
 
 # What is this?
 
-This is the source code for replicating the experiments reported in the paper ["Which Experiences Are Influential for RL Agents? Efficiently Estimating The Influence of Experiences."](https://arxiv.org/abs/2405.14629) [(poster)](https://drive.google.com/file/d/1EpZbWdECgLigpdKC6xWGFllVwLnd41to/view?usp=sharing)
+This is the source code for replicating the experiments reported in ["Which Experiences Are Influential for RL Agents? Efficiently Estimating The Influence of Experiences."](https://openreview.net/forum?id=pUvF97zAu9) [(poster)](https://drive.google.com/file/d/1EpZbWdECgLigpdKC6xWGFllVwLnd41to/view?usp=sharing)
 
 This codebase provides a method to estimate and disable the influence of experiences on the performance of reinforcement learning (RL) agents **WITHOUT** retraining them. 
 ![Outline](figure_readme/pitod_outline.jpg)
