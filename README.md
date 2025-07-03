@@ -46,3 +46,18 @@ To visualize the results, run the following command:
 ```
 python plot_main_results_pitod.py
 ```
+
+
+
+# Leave-One-Out (LOO) method
+
+We also provide a simple implementation of the Leave-One-Out (LOO) method to estimate the influence of experiences.
+To use LOO, run loo-main-TH.py, e.g.,  
+```
+python loo-main-TH.py -info LOO -env Hopper-v2 -seed 0 -gpu_id 0 -layer_norm 1 -layer_norm_policy 1
+```
+
+Additional examples of execution commands can be found in the script `run_experiment-loo.sh`. 
+The experimental results will be recorded in `runs/..../baseline`. 
+
+
