@@ -61,3 +61,15 @@ Additional examples of execution commands can be found in the script `run_experi
 The experimental results will be recorded in `runs/..../baseline`. 
 
 
+
+# Citation
+If you use this repo or find it useful, please consider citing:
+```
+@inproceedings{hiraoka2025which,
+title={Which Experiences Are Influential for {RL} Agents? Efficiently Estimating The Influence of Experiences},
+author={Takuya Hiraoka and Takashi Onishi and Guanquan Wang and Yoshimasa Tsuruoka},
+booktitle={Reinforcement Learning Conference},
+year={2025},
+url={https://openreview.net/forum?id=pUvF97zAu9}
+}
+```
