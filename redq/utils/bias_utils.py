@@ -94,20 +94,19 @@ def get_mc_return_with_entropy_and_obs_act(bias_eval_env: Env,
 
     return final_mc_entropy_list, final_mc_entropy_list_normalize_base, obs_tensor, acts_tensor
 
-# TODO rename to e.g., _evaluate_performance_with_masks
 def _evaluate_performance_with_masks(agent: REDQSACAgent,
-               sample_mask_size: int,
-               eval_data_size: int,
-               obs_tensor: torch.Tensor,
-               acts_tensor: torch.Tensor,
-               final_mc_entropy_list: np.ndarray,
-               final_mc_entropy_list_normalize_base: np.ndarray,
-               evaluation_metric: str = "q_bias",
-               mask: Union[np.ndarray, None] = None,
-               env: Union[Env, None] = None,
-               video_dir: Union[str, None] = None):  # -> Tuple[List[np.float64, ...],List[np.float64, ...],np.ndarray]:
-    # TODO fix type hint error.
-
+                                     sample_mask_size: int,
+                                     eval_data_size: int,
+                                     obs_tensor: torch.Tensor,
+                                     acts_tensor: torch.Tensor,
+                                     final_mc_entropy_list: np.ndarray,
+                                     final_mc_entropy_list_normalize_base: np.ndarray,
+                                     evaluation_metric: str = "q_bias",
+                                     mask: Union[np.ndarray, None] = None,
+                                     env: Union[Env, None] = None,
+                                     n_eval: int = 10,
+                                     video_dir: Union[str, None] = None) \
+        -> Tuple[List[np.float64],List[np.float64],np.ndarray]:
     #  Generate indices using uniform sampling from the start of the replay buffer (oldest experience)
     #  to the latest experience, defined by `agent.replay_buffer.size - 1.
     indices = torch.arange(start=0,
@@ -135,7 +134,8 @@ def _evaluate_performance_with_masks(agent: REDQSACAgent,
                                                                               final_mc_entropy_list_normalize_base)
         elif evaluation_metric == "return":
             current_masks = masks_tensor[i].repeat(1, 1)
-            flip_score, non_flip_score = _return_with_flip_and_non_flip_masks(agent, current_masks, env, video_dir)
+            flip_score, non_flip_score = _return_with_flip_and_non_flip_masks(agent, current_masks, env,
+                                                                              n_eval, video_dir)
         else:
             raise NotImplementedError
 
@@ -169,8 +169,8 @@ def _q_bias_with_flip_and_non_flip_masks(agent: REDQSACAgent,
 
 
 def _return_with_flip_and_non_flip_masks(agent: REDQSACAgent, current_masks: torch.Tensor, env: Env,
-                                         video_dir: Union[str, None] = None) -> Tuple[np.float64, np.float64]:
-    n_eval = 10
+                                         n_eval: int = 10, video_dir: Union[str, None] = None) \
+        -> Tuple[np.float64, np.float64]:
     max_ep_len = 1000
 
     def _return(agent: REDQSACAgent, current_masks: torch.Tensor, env: Env,
@@ -316,18 +316,19 @@ def _save_information_list_for_influences(agent: REDQSACAgent,
 
 
 def log_evaluation(bias_eval_env: Env,
-                        agent: REDQSACAgent,
-                        logger: Logger,
-                        max_ep_len: int,
-                        alpha: float,
-                        gamma: float,
-                        n_mc_eval: int,
-                        n_mc_cutoff: int,
-                        experience_cleansing: bool = False,
-                        dump_trajectory_for_demo: bool = False,
-                        record_training_self_training_losses: bool = False,
-                        influence_estimation_interval: int = 10,
-                        ) -> None:
+                   agent: REDQSACAgent,
+                   logger: Logger,
+                   max_ep_len: int,
+                   alpha: float,
+                   gamma: float,
+                   n_mc_eval: int,
+                   n_mc_cutoff: int,
+                   experience_cleansing: bool = False,
+                   dump_trajectory_for_demo: bool = False,
+                   record_training_self_training_losses: bool = False,
+                   influence_estimation_interval: int = 10,
+                   n_eval: int = 10
+                   ) -> None:
     # bias evaluation part
     final_mc_list, final_mc_entropy_list, final_obs_list, final_act_list, final_done_list = get_mc_return_with_entropy_on_reset(
         bias_eval_env, agent, max_ep_len, alpha, gamma, n_mc_eval, n_mc_cutoff)
@@ -357,7 +358,7 @@ def log_evaluation(bias_eval_env: Env,
         agent.num_epoch = -1
     agent.num_epoch += 1
 
-    sample_mask_size = 300
+    sample_mask_size = np.ceil(float(agent.replay_buffer.max_size) / agent.replay_buffer.experience_group_size).astype(int)
     eval_data_size = bias.size
 
     if (agent.num_epoch % influence_estimation_interval) == 0:
@@ -372,7 +373,8 @@ def log_evaluation(bias_eval_env: Env,
                                                                                        final_mc_entropy_list,
                                                                                        final_mc_entropy_list_normalize_base,
                                                                                        metric,
-                                                                                       env=bias_eval_env)
+                                                                                       env=bias_eval_env,
+                                                                                       n_eval=n_eval)
             # - record return and biases.
             _save_information_list_for_influences(agent, flip_score, "list_flip_" + str(metric), logger.output_dir)
             _save_information_list_for_influences(agent, non_flip_score, "list_non_flip_" + str(metric),
@@ -401,9 +403,10 @@ def log_evaluation(bias_eval_env: Env,
 
                     # dumping most negatively/positively influential trajectory. #TODO remove or clean up
                     if dump_trajectory_for_demo and metric == "return":
-                        # TODO replace magic numbers of 5000 with agent.buffer.mask_dim or specify via argument
-                        delete_start = math.floor(best_ind / 5000.0) * 5000  # fixed to multiply size of mask cluster
-                        delete_end = delete_start + 5000  # TODO ditto
+                        experience_group_size = agent.replay_buffer.experience_group_size
+
+                        delete_start = math.floor(best_ind / float(experience_group_size)) * experience_group_size
+                        delete_end = delete_start + experience_group_size
                         delete_index = np.arange(delete_start, delete_end)
                         # dump trajectory deleted at amendment.
                         batch_deleted = agent.replay_buffer.sample_batch(batch_size=None, idxs=delete_index)
@@ -416,9 +419,8 @@ def log_evaluation(bias_eval_env: Env,
                             if worst_flip_score < influence[ind]:
                                 worst_flip_score = influence[ind]
                                 worst_ind = indices[ind]
-                        # TODO replace magic number 5000.0 with agent.buffer.mask_dim
-                        delete_start = math.floor(worst_ind / 5000.0) * 5000  # fixed to multiply size of mask cluster
-                        delete_end = delete_start + 5000  # TODO ditto
+                        delete_start = math.floor(worst_ind / float(experience_group_size)) * experience_group_size
+                        delete_end = delete_start + experience_group_size
                         delete_index = np.arange(delete_start, delete_end)
                         # dump trajectory deleted at amendment.
                         batch_left = agent.replay_buffer.sample_batch(batch_size=None, idxs=delete_index)
@@ -436,6 +438,7 @@ def log_evaluation(bias_eval_env: Env,
                                                                                        metric,
                                                                                        best_flip_mask,
                                                                                        env=bias_eval_env,
+                                                                                       n_eval=n_eval,
                                                                                        video_dir=logger.output_dir + "/amended_at_" + str(agent.num_epoch) + "_" if dump_trajectory_for_demo else None
                                                                                        )
                     _, non_flip_scores_vanilla, _ = _evaluate_performance_with_masks(agent,
@@ -448,6 +451,7 @@ def log_evaluation(bias_eval_env: Env,
                                                                                      metric,
                                                                                      np.ones_like(best_flip_mask) * 0.5,
                                                                                      env=bias_eval_env,
+                                                                                     n_eval=n_eval,
                                                                                      video_dir=logger.output_dir + "/vanilla_at_" + str(agent.num_epoch) + "_" if dump_trajectory_for_demo else None
                                                                                      )
                     _save_information_list_for_influences(agent,
@@ -455,7 +459,7 @@ def log_evaluation(bias_eval_env: Env,
                                                           "list_" + str(metric) + "_cleansing",
                                                           logger.output_dir)
 
-                    if metric == "q_bias":  # todo remove?
+                    if metric == "q_bias":  # TODO remove?
                         valid_final_mc_entropy_list, valid_final_mc_entropy_list_normalize_base, \
                             valid_obs_tensor, valid_acts_tensor = get_mc_return_with_entropy_and_obs_act(bias_eval_env,
                                                                                                          agent,

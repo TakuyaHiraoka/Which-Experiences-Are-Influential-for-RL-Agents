@@ -33,7 +33,7 @@ def pitod(env_name: str,
           gpu_id: int = 0,
           # The following are base agent related hyperparameters
           hidden_sizes: Tuple[int, ...] = (int(256 / 2), int(256 / 2)),
-          replay_size: int = int(2e6),
+          replay_size: int = int(1.51e6), #int(2e6),
           batch_size: int = 256,
           lr: float = 3e-4,
           gamma: float = 0.99,
@@ -64,6 +64,7 @@ def pitod(env_name: str,
           dump_trajectory_for_demo: bool = False,  # True,
           record_training_self_training_losses: bool = True,
           influence_estimation_interval: int = 10,
+          n_eval: int = 10,
           ):
     """
     Run PIToD algorithm.
@@ -105,7 +106,8 @@ def pitod(env_name: str,
     :param experience_cleansing: Periodical evaluation with deletion of negatively influential experiences.
     :param dump_trajectory_for_demo: Whether to dump the trajectory for visualization purposes.
     :param record_training_self_training_losses: Whether to record training and self-training losses.
-    :param influence_estimation_interval:  interval for influence estimation and policy/Q-function amendment.
+    :param influence_estimation_interval: Interval for influence estimation and policy/Q-function amendment.
+    :param n_eval: Number of trials for averaging return in return influence estimation.
     """
 
     # set device to gpu if available
@@ -221,11 +223,12 @@ def pitod(env_name: str,
             test_agent(agent, test_env, max_ep_len, logger, n_eval=n_evals_per_epoch)  # add logging here
             if evaluate_bias:
                 log_evaluation(bias_eval_env, agent, logger, max_ep_len, alpha, gamma, n_mc_eval, n_mc_cutoff,
-                                    experience_cleansing=experience_cleansing,
-                                    dump_trajectory_for_demo=dump_trajectory_for_demo,
-                                    record_training_self_training_losses=record_training_self_training_losses,
-                                    influence_estimation_interval=influence_estimation_interval,
-                                    )
+                               experience_cleansing=experience_cleansing,
+                               dump_trajectory_for_demo=dump_trajectory_for_demo,
+                               record_training_self_training_losses=record_training_self_training_losses,
+                               influence_estimation_interval=influence_estimation_interval,
+                               n_eval=n_eval
+                               )
 
             # reseed should improve reproducibility (should make results the same whether bias evaluation is on or not)
             if reseed_each_epoch:
@@ -302,6 +305,14 @@ if __name__ == '__main__':
     parser.add_argument("-adversarial_reward_epoch", type=int, default=-999,
                         help="The epoch during which the agent encounters adversarial rewards. Default is -999.")
 
+    parser.add_argument("-n_eval", type=int, default=10,
+                        help="Number of trials for averaging return in return influence estimation. Default is 10.")
+    parser.add_argument("-experience_group_size", type=int, default=5000,
+                        help="Size of each experience group. Default is 5000.")
+    parser.add_argument("-hidden_sizes", type=int, nargs="+", default=[128, 128],
+                        help="Hidden layer sizes for Q and policy networks. Example: -hidden_sizes 128 128")
+
+
     args = parser.parse_args()
 
     # setup experiment log directories
@@ -314,4 +325,9 @@ if __name__ == '__main__':
     pitod(args.env, seed=args.seed, epochs=args.epochs, logger_kwargs=logger_kwargs, gpu_id=args.gpu_id,
           num_Q=args.num_q, layer_norm=bool(args.layer_norm), layer_norm_policy=bool(args.layer_norm_policy),
           target_drop_rate=args.target_drop_rate, reset_interval=args.reset_interval,
-          adversarial_reward_epoch=args.adversarial_reward_epoch)
+          adversarial_reward_epoch=args.adversarial_reward_epoch,
+
+          n_eval=args.n_eval,
+          experience_group_size=args.experience_group_size,
+          hidden_sizes=tuple(args.hidden_sizes)
+          )

@@ -48,6 +48,21 @@ python plot_main_results_pitod.py
 ```
 
 
+## Note: PIToD runtime and memory
+
+**Runtime**
+In *return* influence estimation, **for each mask** the agent is evaluated **n_eval * 2** times (for flip and non-flip cases) by interacting with an evaluation environment (default: `n_eval=10`). If the environment is heavy, this can dominate wall-clock time. For speedup, reduce `n_eval` (e.g., `10 -> 1`). 
+Also, increasing `experience_group_size` reduces the number of experience-group targets to evaluate (e.g., `5000 -> 10000`), often providing a substantial speedup. 
+
+**Memory footprint**
+- PIToD uses macro dropout (see the appendix of my paper for details) and **larger models than (vanilla) 256 x 256 MLP**, so VRAM usage is higher. On most modern GPUs this should be fine, but if your memory resource is tight, reduce `hidden_sizes` (e.g., `256 -> 80` per layer). 
+
+**Example**
+For example, the above can be specified with the following command: 
+```
+python main-TH.py  -info SAC+ToD -env Hopper-v2 -seed 0 -gpu_id 0 -layer_norm 1 -layer_norm_policy 1 -n_eval 1 -experience_group_size 10000 -hidden_sizes 80 80
+```
+
 
 # Leave-One-Out (LOO) method
 
